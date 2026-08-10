@@ -216,3 +216,27 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project-specific
+opencode.json
+AGENTS.md
+prompt.md
+
+# SQLite database
+/data
+*.sqlite
+*.sqlite3
+*.db
+
+# Node
+node_modules/
+.nuxt/
+.output/
+.dist/
+frontend/.env
+
+# Python backend
+backend/.venv/
+__pycache__/
+backend/.env
+backend/.pytest_cache/
