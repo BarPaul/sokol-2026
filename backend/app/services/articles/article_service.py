@@ -1,6 +1,8 @@
 import datetime as dt
 import re
-from typing import Any
+import unicodedata
+from difflib import SequenceMatcher
+from typing import Any, Iterable
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -10,6 +12,105 @@ from app.models.account import Account
 from app.models.article import Article
 from app.models.log import Log
 from app.schemas.article import ArticleCreate, ArticleUpdate
+
+
+WORD_RE = re.compile(r"\w+", re.UNICODE)
+
+
+def _normalize(text: str) -> str:
+    """Нормализация для устойчивого к опечаткам поиска."""
+    text = unicodedata.normalize("NFKC", text).casefold()
+    text = text.replace("ё", "е")
+    return text
+
+
+def reading_minutes(article: Article) -> int:
+    """Автоматический расчёт времени чтения (~200 слов/мин)."""
+    raw = " ".join(
+        filter(None, [article.title, article.summary, article.content, article.audience, article.documents])
+    )
+    words = len(WORD_RE.findall(raw))
+    minutes = max(1, round(words / 200))
+    return minutes
+
+
+def fuzzy_score(query: str, candidate: str) -> float:
+    """Схожесть [0..1] между запросом и строкой, устойчивая к опечаткам.
+
+    Правила строгости:
+    * точная подстрока после нормализации -> 1.0;
+    * каждое слово запроса сравнивается с лучшим по сходству словом кандидата;
+    * слово считается «совпавшим», если его лучший ratio >= WORD_MATCH (0.62);
+    * если совпало меньше половины слов запроса — запрос считается мусорным
+      (фраза-бред вроде «абсолютный бред» не найдёт статьи), результат 0.0;
+    * иначе — средний ratio по словам запроса.
+    """
+    q = _normalize(query)
+    c = _normalize(candidate)
+    if not q or not c:
+        return 0.0
+    if q in c or c in q:
+        return 1.0
+    q_words = [w for w in q.split() if w]
+    c_words = [w for w in c.split() if w]
+    if not q_words or not c_words:
+        return 0.0
+    best_all = []
+    for qw in q_words:
+        ratios = [SequenceMatcher(None, qw, cw).ratio() for cw in c_words]
+        best_all.append(max(ratios))
+    matched = sum(1 for r in best_all if r >= 0.62)
+    required = max(1, len(best_all) // 2)
+    if matched < required:
+        return 0.0
+    return sum(best_all) / len(best_all)
+
+
+def _norm_contains(query: str, text: str) -> bool:
+    """Case-insensitive substring match, корректный для кириллицы.
+
+    SQLite ilike/lower понимают только ASCII, поэтому для публичного поиска
+    по q используем нормализацию в Python.
+    """
+    return _normalize(query) in _normalize(text)
+
+
+def article_search_text(a: Article) -> str:
+    return " ".join(
+        filter(None, [a.title, a.summary, a.content, a.audience, a.documents, a.category])
+    )
+
+
+def fuzzy_match_articles(
+    db: Session, query: str, published_only: bool = True, limit: int = 10
+) -> list[dict]:
+    """Поиск официальных статей с допуском к опечаткам по названию/описанию/содержимому."""
+    stmt = select(Article)
+    if published_only:
+        stmt = stmt.where(Article.status == "published")
+    articles: list[Article] = list(db.scalars(stmt))
+    scored: list[tuple[float, Article]] = []
+    for a in articles:
+        text = " ".join(filter(None, [a.title, a.summary, a.content, a.audience, a.documents]))
+        score = fuzzy_score(query, text)
+        if score >= 0.3:
+            scored.append((score, a))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [_card(a) for _, a in scored[:limit]]
+
+
+def _card(a: Article) -> dict[str, Any]:
+    return {
+        "id": a.id,
+        "title": a.title,
+        "slug": a.slug,
+        "summary": a.summary,
+        "category": a.category,
+        "updated_at": a.updated_at,
+        "published_at": a.published_at,
+        "views": a.views,
+        "reading_minutes": reading_minutes(a),
+    }
 
 
 def slugify(title: str) -> str:
@@ -47,6 +148,8 @@ def serialize_article(article: Article) -> dict[str, Any]:
         "official_source": article.official_source,
         "restrictions": article.restrictions,
         "status": article.status,
+        "views": article.views,
+        "reading_minutes": reading_minutes(article),
         "author_id": article.author_id,
         "author_name": f"{article.author.first_name} {article.author.last_name}",
         "created_at": article.created_at,
@@ -159,6 +262,20 @@ class ArticleService:
         if article.published_at is None:
             article.published_at = dt.datetime.utcnow()
         self.log(account, "article.published", "article", article.id, f"Статья опубликована: {article.title}")
+        self.db.commit()
+        self.db.refresh(article)
+        return article
+
+    def unpublish(self, account: Account, article_id: int) -> Article | None:
+        """Снять с публикации: статус -> draft, материал уходит из публичной выдачи."""
+        article = self.db.get(Article, article_id)
+        if article is None:
+            raise HTTPException(status_code=404, detail="Статья не найдена")
+        if article.status != "published":
+            raise HTTPException(status_code=400, detail="Статья не опубликована")
+        article.status = "archived"
+        article.published_at = None
+        self.log(account, "article.unpublished", "article", article.id, f"Статья снята с публикации: {article.title}")
         self.db.commit()
         self.db.refresh(article)
         return article

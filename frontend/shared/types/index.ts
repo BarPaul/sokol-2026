@@ -5,10 +5,15 @@ export interface ArticleCard {
   summary: string
   category: string
   updated_at: string
+  published_at?: string | null
+  views?: number
+  reading_minutes?: number
 }
 
 export interface Article extends ArticleCard {
   content: string
+  audience: string
+  documents: string
   region: string
   official_source: string
   restrictions: string
@@ -17,6 +22,8 @@ export interface Article extends ArticleCard {
   status: string
   created_at: string
   published_at: string | null
+  views: number
+  reading_minutes: number
   coauthors: Coauthor[]
   related: ArticleCard[]
 }
@@ -40,6 +47,14 @@ export interface CategoryItem {
   count: number
 }
 
+export interface Category {
+  id: number
+  name: string
+  sort_order: number
+  created_at?: string | null
+  count?: number
+}
+
 // Auth
 export interface LoginPayload {
   email: string
@@ -55,6 +70,7 @@ export interface Account {
   status: string
   created_at?: string
   last_login_at?: string | null
+  articles_count?: number
 }
 
 export interface TokenResponse {
@@ -97,6 +113,8 @@ export interface ArticleCreate {
   title: string
   summary: string
   content: string
+  audience: string
+  documents: string
   category: string
   region: string
   official_source: string

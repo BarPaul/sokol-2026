@@ -73,7 +73,7 @@ async function loadArticle() {
 
 async function searchEditors() {
   const params = search.value ? `?q=${encodeURIComponent(search.value)}` : ''
-  const res = await request<EditorAccount[]>('/api/admin/editors' + params)
+  const res = await request<EditorAccount[]>('/api/editor/editors' + params)
   editors.value = res.filter(e => !coauthors.value.some(c => c.id === e.id) && e.id !== article.value?.author_id)
 }
 

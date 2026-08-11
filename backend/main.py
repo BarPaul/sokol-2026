@@ -1,10 +1,13 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.api import articles, assistant, admin, auth, editor
+from app.api.editor import editors_search
 
 from app.db.base import Base
 from app.db.session import engine, SessionLocal
@@ -29,6 +32,7 @@ def seed():
 
     from app.models.account import Account, Role
     from app.models.article import Article
+    from app.models.category import Category
     from app.models.knowledge import KnowledgeDocument
     from app.services.auth.auth_service import hash_password
 
@@ -43,6 +47,13 @@ def seed():
                 db.flush()
             roles[name] = role
         db.commit()
+
+        if db.scalar(select(Category).limit(1)) is None:
+            for i, name in enumerate(
+                ["Выплаты и льготы", "Жильё", "Права и консультации", "Обучение", "Здоровье"]
+            ):
+                db.add(Category(name=name, sort_order=i))
+            db.commit()
 
         defaults = [
             (settings.seed_admin_email, settings.seed_admin_password, "Администратор", "Системы", "moderator"),
@@ -121,3 +132,8 @@ app.add_middleware(
 
 for module in (auth, articles, assistant, editor, admin):
     app.include_router(module.router, prefix=settings.api_prefix)
+app.include_router(editors_search, prefix=settings.api_prefix)
+
+uploads_dir = Path(settings.sqlite_path).parent / "uploads"
+uploads_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/api/uploads", StaticFiles(directory=uploads_dir), name="uploads")

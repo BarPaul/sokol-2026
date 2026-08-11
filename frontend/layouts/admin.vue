@@ -2,19 +2,24 @@
   <div class="flex min-h-screen bg-slate-50">
     <aside class="hidden w-64 shrink-0 border-r border-slate-200 bg-white md:flex md:flex-col">
       <div class="flex h-16 items-center gap-2 border-b border-slate-200 px-5">
-        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-700 text-white">А</span>
-        <span class="font-semibold text-slate-900">Панель админист.</span>
+        <NuxtLink to="/" class="flex items-center gap-2">
+          <span class="font-semibold text-slate-900">Панель админист.</span>
+        </NuxtLink>
       </div>
       <nav class="flex flex-1 flex-col gap-1 p-4">
-        <NuxtLink to="/admin" class="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-indigo-50 hover:text-indigo-800">Дашборд</NuxtLink>
-        <NuxtLink to="/admin/editors" class="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-indigo-50 hover:text-indigo-800">Редакторы</NuxtLink>
-        <NuxtLink to="/admin/logs" class="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-indigo-50 hover:text-indigo-800">Журнал действий</NuxtLink>
-        <NuxtLink to="/admin/ai" class="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-indigo-50 hover:text-indigo-800">Настройки AI</NuxtLink>
-        <NuxtLink to="/admin/knowledge" class="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-indigo-50 hover:text-indigo-800">База знаний</NuxtLink>
-        <NuxtLink to="/admin/profile" class="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-indigo-50 hover:text-indigo-800">Профиль</NuxtLink>
+        <NuxtLink
+          v-for="item in navItems"
+          :key="item.to"
+          :to="item.to"
+          class="rounded-lg px-3 py-2 text-sm font-medium hover:bg-indigo-50 hover:text-indigo-800"
+          :class="isActive(item.to) ? 'bg-indigo-50 text-indigo-800 font-semibold' : 'text-slate-600'"
+        >
+          {{ item.label }}
+        </NuxtLink>
       </nav>
-      <div class="p-4">
-        <button class="btn-secondary w-full" @click="logout">Выйти</button>
+      <div class="flex flex-col gap-2 p-4">
+        <NuxtLink to="/" class="btn-secondary w-full text-center">На главный сайт</NuxtLink>
+        <button class="btn-primary w-full" @click="logout">Выйти</button>
       </div>
     </aside>
 
@@ -27,12 +32,17 @@
       </div>
       <div v-if="mobileOpen" class="border-b border-slate-200 bg-white p-4">
         <nav class="flex flex-col gap-3">
-          <NuxtLink to="/admin" @click="mobileOpen = false">Дашборд</NuxtLink>
-          <NuxtLink to="/admin/editors" @click="mobileOpen = false">Редакторы</NuxtLink>
-          <NuxtLink to="/admin/logs" @click="mobileOpen = false">Журнал</NuxtLink>
-          <NuxtLink to="/admin/ai" @click="mobileOpen = false">Настройки AI</NuxtLink>
-          <NuxtLink to="/admin/knowledge" @click="mobileOpen = false">База знаний</NuxtLink>
-          <NuxtLink to="/admin/profile" @click="mobileOpen = false">Профиль</NuxtLink>
+          <NuxtLink
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            class="font-medium"
+            :class="isActive(item.to) ? 'text-indigo-700' : 'text-slate-700'"
+            @click="mobileOpen = false"
+          >
+            {{ item.label }}
+          </NuxtLink>
+          <NuxtLink to="/" class="text-teal-700 font-medium" @click="mobileOpen = false">На главный сайт</NuxtLink>
         </nav>
       </div>
     </div>
@@ -46,6 +56,23 @@
 <script setup lang="ts">
 const mobileOpen = ref(false)
 const { logout } = useApi()
+const route = useRoute()
+
+const navItems = [
+  { label: 'Дашборд', to: '/admin' },
+  { label: 'Редакторы', to: '/admin/editors' },
+  { label: 'Статьи', to: '/admin/articles' },
+  { label: 'Журнал действий', to: '/admin/logs' },
+  { label: 'Категории', to: '/admin/categories' },
+  { label: 'Настройки AI', to: '/admin/ai' },
+  { label: 'База знаний', to: '/admin/knowledge' },
+  { label: 'Профиль', to: '/admin/profile' },
+]
+
+const isActive = (to: string) => {
+  if (to === '/admin') return route.path === '/admin'
+  return route.path.startsWith(to)
+}
 
 definePageMeta({ layout: 'admin' })
 </script>

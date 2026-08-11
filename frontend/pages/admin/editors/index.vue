@@ -22,7 +22,9 @@
         </thead>
         <tbody>
           <tr v-for="e in editors" :key="e.id" class="border-b border-slate-100 last:border-0">
-            <td class="py-3 pr-4 font-medium text-slate-800">{{ e.first_name }} {{ e.last_name }}</td>
+            <td class="py-3 pr-4 font-medium text-slate-800">
+              <NuxtLink :to="`/admin/editors/${e.id}`" class="hover:text-teal-700 hover:underline">{{ e.first_name }} {{ e.last_name }}</NuxtLink>
+            </td>
             <td class="py-3 pr-4 text-slate-500">{{ e.email }}</td>
             <td class="py-3 pr-4">{{ e.role }}</td>
             <td class="py-3 pr-4">

@@ -16,7 +16,9 @@ from app.schemas.knowledge import (
     ReindexResponse,
 )
 from app.schemas.log import LogOut
+from app.schemas.category import CategoryCreate, CategoryOut, CategoryUpdate
 from app.services.audit.audit_service import AuditService
+from app.services.categories.category_service import CategoryService
 from app.services.auth.account_service import AccountService
 from app.services.auth.auth_service import AuthService
 from app.services.knowledge.knowledge_service import KnowledgeService
@@ -25,7 +27,18 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 admin_only = require_role("moderator")
 
 
-def _account_out(a: Account) -> AccountOut:
+def _account_out(a: Account, db: Session | None = None) -> AccountOut:
+    articles_count = 0
+    if db is not None:
+        from sqlalchemy import func, or_, select as sa_select
+
+        from app.models.article import Article
+
+        articles_count = db.scalar(
+            sa_select(func.count(Article.id)).where(
+                or_(Article.author_id == a.id, Article.coauthors.any(id=a.id))
+            )
+        ) or 0
     return AccountOut(
         id=a.id,
         first_name=a.first_name,
@@ -35,6 +48,7 @@ def _account_out(a: Account) -> AccountOut:
         status=a.status,
         created_at=a.created_at,
         last_login_at=a.last_login_at,
+        articles_count=articles_count,
     )
 
 
@@ -48,7 +62,7 @@ def list_editors(
 ):
     service = AccountService(db)
     editors = service.list_editors(search=q or "")
-    return [_account_out(e) for e in editors]
+    return [_account_out(e, db) for e in editors]
 
 
 @router.post("/editors", response_model=AccountOut)
@@ -76,7 +90,7 @@ def get_editor(
     db: Annotated[Session, Depends(get_db)],
 ):
     editor = AccountService(db).get(editor_id)
-    return _account_out(editor)
+    return _account_out(editor, db)
 
 
 @router.patch("/editors/{editor_id}", response_model=AccountOut)
@@ -288,3 +302,85 @@ def reindex_knowledge(
     count = KnowledgeService(db).reindex()
     AuditService(db).log(account.id, "knowledge.reindexed", "knowledge", None, description=f"Переиндексация: {count} документов")
     return ReindexResponse(status="ok", documents=count)
+
+
+# ---------- Articles (all, for admin) ----------
+
+@router.get("/articles")
+def list_all_articles(
+    account: Annotated[Account, Depends(admin_only)],
+    db: Annotated[Session, Depends(get_db)],
+    q: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+):
+    from sqlalchemy import func, select as sa_select
+
+    from app.models.article import Article
+    from app.services.articles.article_service import _norm_contains, article_search_text, serialize_article
+
+    stmt = sa_select(Article)
+    count_stmt = sa_select(func.count(Article.id))
+    if status:
+        stmt = stmt.where(Article.status == status)
+        count_stmt = count_stmt.where(Article.status == status)
+    if q:
+        # кириллица не поддерживается ilike/lower в SQLite — фильтруем в Python.
+        rows = list(db.scalars(stmt))
+        q_filtered = [a for a in rows if _norm_contains(q, article_search_text(a))]
+        total = len(q_filtered)
+        items = q_filtered[offset : offset + limit]
+        return {"items": [serialize_article(a) for a in items], "total": total}
+    total = db.scalar(count_stmt) or 0
+    items = list(
+        db.scalars(stmt.order_by(Article.updated_at.desc()).offset(offset).limit(limit))
+    )
+    return {"items": [serialize_article(a) for a in items], "total": total}
+
+
+# ---------- Categories ----------
+
+@router.get("/categories", response_model=list[dict])
+def list_categories(
+    account: Annotated[Account, Depends(admin_only)],
+    db: Annotated[Session, Depends(get_db)],
+    q: str | None = Query(default=None),
+):
+    return CategoryService(db).list_all(search=q or "")
+
+
+@router.post("/categories", response_model=CategoryOut)
+def create_category(
+    payload: CategoryCreate,
+    account: Annotated[Account, Depends(admin_only)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    cat = CategoryService(db).create(payload)
+    AuditService(db).log(account.id, "category.created", "category", cat.id, description=f"Создана категория: {cat.name}")
+    return cat
+
+
+@router.patch("/categories/{category_id}", response_model=CategoryOut)
+def update_category(
+    category_id: int,
+    payload: CategoryUpdate,
+    account: Annotated[Account, Depends(admin_only)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    cat = CategoryService(db).update(category_id, payload)
+    AuditService(db).log(account.id, "category.updated", "category", cat.id, description=f"Обновлена категория: {cat.name}")
+    return cat
+
+
+@router.delete("/categories/{category_id}")
+def delete_category(
+    category_id: int,
+    account: Annotated[Account, Depends(admin_only)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    service = CategoryService(db)
+    cat = service.get(category_id)
+    service.delete(category_id)
+    AuditService(db).log(account.id, "category.deleted", "category", category_id, description=f"Удалена категория: {cat.name}")
+    return {"status": "ok"}

@@ -1,6 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+import datetime as dt
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_account
@@ -42,6 +44,17 @@ def login(
     account = service.authenticate(payload.email, payload.password)
     AuditService(db).log(account.id, "login", "account", account.id, description=f"Вход: {account.email}")
     return TokenResponse(access_token=service.login(payload.email, payload.password))
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh_token(
+    account: Annotated[Account, Depends(get_current_account)],
+):
+    """Продлевает жизнь токена до 1 часа (вызывается при смене раздела)."""
+    from app.core.security import create_access_token
+
+    token = create_access_token(str(account.id), account.role.name, expires_delta=dt.timedelta(hours=1))
+    return TokenResponse(access_token=token)
 
 
 @router.post("/logout")

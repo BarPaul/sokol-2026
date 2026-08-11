@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.article import Article
-from app.services.articles.article_service import serialize_article
+from app.models.category import Category
+from app.services.articles.article_service import reading_minutes, serialize_article
 from app.services.knowledge.knowledge_service import KnowledgeService
 
 router = APIRouter(prefix="/articles", tags=["articles"])
@@ -18,30 +19,52 @@ def list_articles(
     category: str | None = Query(default=None),
     q: str | None = Query(default=None, description="Поисковый запрос"),
     sort: str = Query(default="updated", pattern="^(updated|created|title)$"),
+    period: str | None = Query(default=None, pattern="^(week|month|3months|year)$"),
     limit: int = Query(default=12, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
+    import datetime as dt
+
+    from app.services.articles.article_service import _norm_contains, article_search_text
+
     stmt = select(Article).where(Article.status == "published")
     count_stmt = select(func.count(Article.id)).where(Article.status == "published")
     if category:
         stmt = stmt.where(Article.category == category)
         count_stmt = count_stmt.where(Article.category == category)
+    if period:
+        days = {"week": 7, "month": 30, "3months": 90, "year": 365}[period]
+        since = dt.datetime.now(dt.timezone.utc).astimezone().replace(tzinfo=None) - dt.timedelta(days=days)
+        stmt = stmt.where(Article.updated_at >= since)
+        count_stmt = count_stmt.where(Article.updated_at >= since)
     if q:
-        like = f"%{q}%"
-        stmt = stmt.where(
-            Article.title.ilike(like)
-            | Article.summary.ilike(like)
-            | Article.content.ilike(like)
-        )
-        count_stmt = count_stmt.where(
-            Article.title.ilike(like)
-            | Article.summary.ilike(like)
-            | Article.content.ilike(like)
-        )
+        # SQLite ilike/lower не работают с кириллицей — фильтруем регистронезависимо в Python.
+        all_matching = [
+            a for a in db.scalars(stmt)
+            if _norm_contains(q, article_search_text(a))
+        ]
+        if sort == "title":
+            all_matching.sort(key=lambda a: (a.title or "").lower())
+        elif sort == "created":
+            all_matching.sort(key=lambda a: a.created_at, reverse=True)
+        elif sort == "views":
+            all_matching.sort(key=lambda a: (a.views or 0), reverse=True)
+        else:
+            all_matching.sort(key=lambda a: a.updated_at, reverse=True)
+        total = len(all_matching)
+        items = all_matching[offset : offset + limit]
+        return {
+            "items": [_card(a) for a in items],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
     if sort == "title":
         stmt = stmt.order_by(Article.title.asc())
     elif sort == "created":
         stmt = stmt.order_by(Article.created_at.desc())
+    elif sort == "views":
+        stmt = stmt.order_by(Article.views.desc())
     else:
         stmt = stmt.order_by(Article.updated_at.desc())
     total = db.scalar(count_stmt) or 0
@@ -62,20 +85,38 @@ def _card(a: Article) -> dict:
         "summary": a.summary,
         "category": a.category,
         "updated_at": a.updated_at,
+        "published_at": a.published_at,
+        "views": a.views,
+        "reading_minutes": reading_minutes(a),
     }
 
 
 @router.get("/categories")
 def list_categories(db: Annotated[Session, Depends(get_db)]):
-    rows = db.execute(
+    """Категории из справочника (заполняет администратор)."""
+    cats = db.scalars(
+        select(Category).order_by(Category.sort_order, Category.name)
+    ).all()
+    counts = dict(
+        db.execute(
+            select(Article.category, func.count(Article.id))
+            .where(Article.status == "published")
+            .group_by(Article.category)
+        ).all()
+    )
+    result = [
+        {"name": c.name, "count": counts.get(c.name, 0)} for c in cats
+    ]
+    # fallback: категории, которые ещё не заведены в справочнике
+    known = {c.name for c in cats}
+    for name, count in db.execute(
         select(Article.category, func.count(Article.id))
         .where(Article.status == "published")
         .group_by(Article.category)
-    ).all()
-    return [
-        {"name": name or "Без категории", "count": count}
-        for name, count in rows if name
-    ]
+    ).all():
+        if name and name not in known:
+            result.append({"name": name, "count": count})
+    return result
 
 
 @router.get("/search")
@@ -84,7 +125,7 @@ def search_articles(
     q: str = Query(default="", min_length=1),
     limit: int = Query(default=10, ge=1, le=50),
 ):
-    """Text search across articles. Falls back to LIKE when FTS unavailable."""
+    """Text search across articles (content + typos tolerated)."""
     q = q.strip()
     if not q:
         return {"items": [], "total": 0}
@@ -99,21 +140,17 @@ def search_articles(
                 seen.add(article.id)
         if len(result) >= limit:
             break
-    if not result:
-        like = f"%{q}%"
-        stmt = (
-            select(Article)
-            .where(
-                Article.status == "published",
-                Article.title.ilike(like)
-                | Article.summary.ilike(like)
-                | Article.content.ilike(like),
-            )
-            .order_by(Article.updated_at.desc())
-            .limit(limit)
-        )
-        result = [_card(a) for a in db.scalars(stmt)]
-    return {"items": result, "total": len(result)}
+    if result:
+        from app.services.articles.article_service import fuzzy_score
+
+        ordered = {a["id"]: fuzzy_score(q, f"{a['title']} {a['summary']}") for a in result}
+        result.sort(key=lambda a: ordered[a["id"]], reverse=True)
+        return {"items": result, "total": len(result)}
+    # FTS не нашёл — пробуем устойчивый к опечаткам поиск по публичным статьям
+    from app.services.articles.article_service import fuzzy_match_articles
+
+    items = fuzzy_match_articles(db, q, published_only=True, limit=limit)
+    return {"items": items, "total": len(items)}
 
 
 @router.get("/{slug}")
@@ -121,6 +158,9 @@ def get_article(slug: str, db: Annotated[Session, Depends(get_db)]):
     article = db.scalar(select(Article).where(Article.slug == slug, Article.status == "published"))
     if article is None:
         raise HTTPException(status_code=404, detail="Статья не найдена")
+    article.views = (article.views or 0) + 1
+    db.commit()
+    db.refresh(article)
     related = list(
         db.scalars(
             select(Article)

@@ -34,3 +34,15 @@ def test_search_empty(client):
     resp = client.get("/api/articles/search", params={"q": "zzzz-not-exists"})
     assert resp.status_code == 200
     assert resp.json()["total"] == 0
+
+
+def test_search_rejects_nonsense(client):
+    resp = client.get("/api/articles/search", params={"q": "абсолютный бред"})
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 0
+
+
+def test_search_typo_tolerant(client):
+    resp = client.get("/api/articles/search", params={"q": "пасабие"})
+    assert resp.status_code == 200
+    assert resp.json()["total"] >= 1

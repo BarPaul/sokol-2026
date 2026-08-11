@@ -15,9 +15,16 @@
         >
         <button class="btn-primary" type="submit">Искать</button>
       </form>
-      <select v-model="category" class="input-sf !w-auto sm:w-56" @change="applyFilters">
+      <select v-model="category" class="input-sf !w-auto sm:w-52" @change="applyFilters">
         <option value="">Все категории</option>
         <option v-for="c in categories" :key="c.name" :value="c.name">{{ c.name }}</option>
+      </select>
+      <select v-model="period" class="input-sf !w-auto sm:w-48" @change="applyFilters">
+        <option value="">За всё время</option>
+        <option value="week">За неделю</option>
+        <option value="month">За месяц</option>
+        <option value="3months">За 3 месяца</option>
+        <option value="year">За год</option>
       </select>
     </div>
 
@@ -56,6 +63,7 @@ const offset = ref(0)
 
 const search = ref((route.query.q as string) || '')
 const category = ref((route.query.category as string) || '')
+const period = ref((route.query.period as string) || '')
 
 async function load() {
   loading.value = true
@@ -63,6 +71,7 @@ async function load() {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset.value) })
     if (search.value) params.set('q', search.value)
     if (category.value) params.set('category', category.value)
+    if (period.value) params.set('period', period.value)
     const res = await request<ArticleListResponse>(`/api/articles?${params.toString()}`)
     items.value = res.items
     total.value = res.total
@@ -76,6 +85,7 @@ function applyFilters() {
   const q: Record<string, string> = {}
   if (search.value) q.q = search.value
   if (category.value) q.category = category.value
+  if (period.value) q.period = period.value
   router.replace({ query: q })
   load()
 }

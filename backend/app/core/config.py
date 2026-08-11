@@ -51,7 +51,7 @@ class Settings(BaseSettings):
 
     @property
     def opencode_config_ready(self) -> bool:
-        return bool(self.opencode_api_key and self.opencode_base_url)
+        return bool(self.opencode_base_url)
 
 
 @lru_cache

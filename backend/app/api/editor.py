@@ -1,9 +1,13 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import uuid
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_current_account, require_role
 from app.db.session import get_db
 from app.models.account import Account
@@ -14,11 +18,40 @@ from app.schemas.article import (
     ArticleUpdate,
     CoauthorAdd,
 )
-from app.services.articles.article_service import ArticleService, serialize_article
+from app.services.articles.article_service import ArticleService, serialize_article, _norm_contains, article_search_text
 from app.services.knowledge.knowledge_service import KnowledgeService
 
 router = APIRouter(prefix="/editor/articles", tags=["editor"])
 editor_only = require_role("editor", "moderator")
+
+
+# ---------- Поиск редакторов (для добавления соавторов) ----------
+editors_search = APIRouter(prefix="/editor", tags=["editor"])
+
+
+@editors_search.get("/editors")
+def list_editors_for_coauthors(
+    account: Annotated[Account, Depends(editor_only)],
+    db: Annotated[Session, Depends(get_db)],
+    q: str | None = Query(default=None),
+):
+    """Список активных редакторов для выбора соавтора."""
+    stmt = select(Account).where(Account.role.has(name="editor"), Account.is_active == True)  # noqa: E712
+    if q:
+        like = f"%{q}%"
+        stmt = stmt.where(
+            or_(Account.first_name.ilike(like), Account.last_name.ilike(like), Account.email.ilike(like))
+        )
+    accounts = list(db.scalars(stmt.order_by(Account.last_name, Account.first_name)))
+    return [
+        {
+            "id": a.id,
+            "first_name": a.first_name,
+            "last_name": a.last_name,
+            "email": a.email,
+        }
+        for a in accounts
+    ]
 
 
 @router.get("")
@@ -44,8 +77,15 @@ def list_editor_articles(
     if category:
         stmt = stmt.where(Article.category == category)
     if q:
-        like = f"%{q}%"
-        stmt = stmt.where(Article.title.ilike(like) | Article.summary.ilike(like))
+        # кириллица не поддерживается ilike/lower в SQLite — фильтруем в Python.
+        rows = list(db.scalars(stmt))
+        q_filtered = [
+            a for a in rows
+            if _norm_contains(q, article_search_text(a))
+        ]
+        total = len(q_filtered)
+        items = q_filtered[offset : offset + limit]
+        return {"items": [serialize_article(a) for a in items], "total": total}
     items = list(db.scalars(stmt.order_by(Article.updated_at.desc()).offset(offset).limit(limit)))
     total = db.scalar(count_stmt) or 0
     return {"items": [serialize_article(a) for a in items], "total": total}
@@ -118,6 +158,21 @@ def publish_editor_article(
     return serialize_article(published)
 
 
+@router.post("/{article_id}/unpublish", response_model=ArticleOut)
+def unpublish_editor_article(
+    article_id: int,
+    account: Annotated[Account, Depends(editor_only)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    service = ArticleService(db)
+    article = service.get_editorial(account, article_id)
+    if article is None:
+        raise HTTPException(status_code=404, detail="Статья не найдена")
+    updated = service.unpublish(account, article_id)
+    KnowledgeService(db).remove_article(article_id)
+    return serialize_article(updated)
+
+
 @router.delete("/{article_id}")
 def delete_editor_article(
     article_id: int,
@@ -161,3 +216,22 @@ def remove_coauthor(
         raise HTTPException(status_code=404, detail="Статья не найдена")
     updated = service.remove_coauthor(account, article_id, coauthor_id)
     return serialize_article(updated)
+
+
+@router.post("/upload")
+async def upload_file(
+    account: Annotated[Account, Depends(editor_only)],
+    file: UploadFile = File(...),
+):
+    """Загрузка изображений и файлов для rich-редактора."""
+    upload_dir = Path(settings.sqlite_path).parent / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    original = file.filename or "file"
+    suffix = Path(original).suffix.lower()[:16]
+    name = f"{uuid.uuid4().hex}{suffix}"
+    dest = upload_dir / name
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Файл больше 20 МБ")
+    dest.write_bytes(content)
+    return {"url": f"/api/uploads/{name}", "filename": original, "size": len(content)}

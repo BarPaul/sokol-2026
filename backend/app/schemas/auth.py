@@ -25,6 +25,7 @@ class AccountOut(BaseModel):
     status: str = "active"
     created_at: dt.datetime | None = None
     last_login_at: dt.datetime | None = None
+    articles_count: int = 0
 
 
 class AccountCreate(BaseModel):

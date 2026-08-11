@@ -1,4 +1,5 @@
 import datetime as dt
+import re
 
 from fastapi import HTTPException
 from sqlalchemy import select, text
@@ -163,11 +164,20 @@ class KnowledgeService:
         if not query.strip():
             return []
         q = query.strip()
+        rows = self._fts_search(q)
+        if rows:
+            return rows
+        tokens = [t for t in re.split(r"[^\wа-яё]+", q, flags=re.IGNORECASE) if len(t) >= 3]
+        if not tokens:
+            return []
+        or_query = " OR ".join(f'"{t}"' for t in tokens)
+        return self._fts_search(or_query)
+
+    def _fts_search(self, q: str) -> list[dict]:
         try:
             rows = self.db.execute(
                 text(
-                    "SELECT doc_id, doc_type, title, content, category, "
-                    "snippet(knowledge_search, 2) AS snip "
+                    "SELECT doc_id, doc_type, title, content, category "
                     "FROM knowledge_search WHERE knowledge_search MATCH :q "
                     "ORDER BY bm25(knowledge_search) LIMIT :limit"
                 ),

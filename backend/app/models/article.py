@@ -33,6 +33,7 @@ class Article(Base):
     official_source: Mapped[str] = mapped_column(Text, default="")
     restrictions: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="draft", index=True)  # draft | published | archived
+    views: Mapped[int] = mapped_column(Integer, default=0)
     author_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(

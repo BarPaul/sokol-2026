@@ -7,9 +7,18 @@
         <label class="label-sf">Заголовок *</label>
         <input v-model="form.title" class="input-sf" required>
       </div>
-      <div>
-        <label class="label-sf">Категория *</label>
-        <input v-model="form.category" class="input-sf" placeholder="Выплаты и льготы" required>
+      <div class="grid gap-5 sm:grid-cols-2">
+        <div>
+          <label class="label-sf">Категория *</label>
+          <select v-model="form.category" class="input-sf" required>
+            <option value="" disabled>Выберите категорию</option>
+            <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="label-sf">Регион</label>
+          <input v-model="form.region" class="input-sf" placeholder="Все регионы / Москва / ...">
+        </div>
       </div>
       <div>
         <label class="label-sf">Краткое описание</label>
@@ -17,16 +26,22 @@
       </div>
       <div>
         <label class="label-sf">Содержание *</label>
-        <textarea v-model="form.content" class="input-sf" rows="12" placeholder="Полный текст статьи. ## для подзаголовков" required />
+        <RichEditor v-model="form.content" placeholder="Введите текст статьи. Форматируйте панелью сверху." />
       </div>
-      <div class="grid gap-5 sm:grid-cols-3">
+      <div class="grid gap-5 sm:grid-cols-2">
         <div>
-          <label class="label-sf">Регион</label>
-          <input v-model="form.region" class="input-sf">
+          <label class="label-sf">Кому положено</label>
+          <RichEditor v-model="form.audience" placeholder="Условия получения..." />
         </div>
         <div>
+          <label class="label-sf">Необходимые документы</label>
+          <RichEditor v-model="form.documents" placeholder="Перечень документов..." />
+        </div>
+      </div>
+      <div class="grid gap-5 sm:grid-cols-2">
+        <div>
           <label class="label-sf">Официальный источник</label>
-          <input v-model="form.official_source" class="input-sf">
+          <input v-model="form.official_source" class="input-sf" placeholder="Закон / ведомство">
         </div>
         <div>
           <label class="label-sf">Ограничения</label>
@@ -48,6 +63,15 @@
           @click="publish"
         >
           Опубликовать
+        </button>
+        <button
+          v-if="isEdit && article?.status === 'published'"
+          class="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
+          type="button"
+          :disabled="saving"
+          @click="unpublish"
+        >
+          Снять с публикации
         </button>
       </div>
     </form>
@@ -88,11 +112,15 @@ const { request } = useApi()
 const isEdit = computed(() => props.articleId !== null)
 const title = computed(() => (isEdit.value ? 'Редактирование статьи' : 'Создание статьи'))
 
+const article = ref<Article | null>(props.initial as Article | null ?? null)
+
 const form = reactive({
   title: '',
   category: '',
   summary: '',
   content: '',
+  audience: '',
+  documents: '',
   region: '',
   official_source: '',
   restrictions: '',
@@ -102,19 +130,31 @@ const form = reactive({
 const coauthors = ref<{ id: number; first_name: string; last_name: string; email: string }[]>([])
 const saving = ref(false)
 const error = ref('')
+const categories = ref<string[]>([])
+
+async function loadCategories() {
+  try {
+    const res = await request<{ name: string }[]>('/api/articles/categories')
+    categories.value = res.map((c) => c.name)
+  } catch {
+    categories.value = []
+  }
+}
 
 if (props.initial) {
   Object.assign(form, {
-    title: props.initial.title,
-    category: props.initial.category,
-    summary: props.initial.summary,
-    content: props.initial.content,
-    region: props.initial.region,
-    official_source: props.initial.official_source,
-    restrictions: props.initial.restrictions,
-    status: props.initial.status,
+    title: props.initial.title || '',
+    category: props.initial.category || '',
+    summary: props.initial.summary || '',
+    content: props.initial.content || '',
+    audience: props.initial.audience || '',
+    documents: props.initial.documents || '',
+    region: props.initial.region || '',
+    official_source: props.initial.official_source || '',
+    restrictions: props.initial.restrictions || '',
+    status: props.initial.status || 'draft',
   })
-  coauthors.value = props.initial.coauthors || []
+  coauthors.value = (props.initial as Partial<Article>).coauthors || []
 }
 
 async function persist(status: 'draft' | 'published') {
@@ -141,5 +181,20 @@ async function persist(status: 'draft' | 'published') {
 }
 
 const saveDraft = () => persist('draft')
-const publish = () => persist('published')
+const publish = async () => persist('published')
+
+async function unpublish() {
+  error.value = ''
+  saving.value = true
+  try {
+    await request(`/api/editor/articles/${props.articleId}/unpublish`, { method: 'POST' })
+    router.push('/editor/articles')
+  } catch (e) {
+    error.value = (e as { data?: { detail?: string } })?.data?.detail || 'Ошибка снятия с публикации'
+  } finally {
+    saving.value = false
+  }
+}
+
+onMounted(loadCategories)
 </script>

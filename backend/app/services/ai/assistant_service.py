@@ -122,15 +122,13 @@ class AssistantService:
 
         recommended: list[Article] = []
         hits = self.knowledge.search(content)
-        seen: set[str] = set()
+        seen: set[int] = set()
         for h in hits:
             if h["doc_type"] == "article":
-                slug = h.get("title", "").strip()
-                if slug and slug not in seen:
-                    article = self.db.scalar(select(Article).where(Article.slug == slug))
-                    if article and article.status == "published":
-                        recommended.append(article)
-                        seen.add(slug)
+                article = self.db.get(Article, h["doc_id"])
+                if article and article.status == "published" and article.id not in seen:
+                    recommended.append(article)
+                    seen.add(article.id)
             if len(recommended) >= 3:
                 break
         return assistant_msg, recommended
