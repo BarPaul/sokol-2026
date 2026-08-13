@@ -69,6 +69,4 @@ const isActive = (to: string) => {
   if (to === '/editor') return route.path === '/editor'
   return route.path.startsWith(to)
 }
-
-definePageMeta({ layout: 'editor' })
 </script>

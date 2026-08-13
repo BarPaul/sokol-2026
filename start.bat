@@ -24,7 +24,10 @@ if not exist "frontend\node_modules" (
     exit /b 1
 )
 
-echo [1/3] Applying database migrations...
+echo [0/4] Starting OpenCode AI service (http://127.0.0.1:4096) ...
+start "Sokol-2026 OpenCode AI" cmd /k "cd /d %~dp0 && opencode serve --port 4096 --hostname 127.0.0.1"
+
+echo [1/4] Applying database migrations...
 pushd backend
 .venv\Scripts\python.exe -m alembic upgrade head
 if errorlevel 1 (
@@ -35,15 +38,15 @@ if errorlevel 1 (
 popd
 
 echo.
-echo [2/3] Starting backend API  (http://127.0.0.1:8000) ...
+echo [2/4] Starting backend API  (http://127.0.0.1:8000) ...
 start "Sokol-2026 backend (FastAPI)" cmd /k "cd /d %~dp0backend && .venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload"
 
 echo.
-echo [3/3] Starting frontend (http://127.0.0.1:3000) ...
+echo [3/4] Starting frontend (http://127.0.0.1:3000) ...
 start "Sokol-2026 frontend (Nuxt)" cmd /k "cd /d %~dp0frontend && node node_modules\nuxt\bin\nuxt.mjs dev --port 3000 --host 127.0.0.1"
 
 echo.
 echo All services are launching. Open http://127.0.0.1:3000
-echo Close the two new terminal windows to stop the services.
+echo Close the three new terminal windows to stop the services.
 echo.
 pause

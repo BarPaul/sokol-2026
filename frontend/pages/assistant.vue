@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col md:flex-row" style="height: calc(100vh - 64px)">
+  <div class="flex flex-col md:flex-row" :style="containerStyle">
     <ChatSidebar
       :chats="chats"
       :active-id="activeChatId"
@@ -8,9 +8,9 @@
       @new-chat="newChat"
     />
 
-    <main class="flex flex-1 flex-col bg-slate-50">
+    <main class="flex min-h-0 flex-1 flex-col bg-slate-50">
       <!-- Welcome -->
-      <div v-if="!activeChatId" class="flex flex-1 flex-col items-center justify-center px-4 py-8">
+      <div v-if="!activeChatId" class="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-8">
         <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-700 text-2xl text-white">
           СФ
         </div>
@@ -35,13 +35,13 @@
       </div>
 
       <!-- Chat -->
-      <div v-else class="flex flex-1 flex-col">
-        <div class="flex-1 overflow-y-auto p-4">
+      <div v-else class="flex min-h-0 flex-1 flex-col">
+        <div ref="scrollContainer" class="min-h-0 flex-1 overflow-y-auto p-4">
           <div class="flex flex-col gap-4">
             <ChatMessage v-for="m in messages" :key="m.id" :message="m" />
 
             <div v-if="loading" class="flex items-center gap-2 text-sm text-slate-500">
-              <Icon name="lucide:loader-2" class="h-4 w-4 animate-spin" />
+              <Icon name="heroicons:arrow-path" class="h-4 w-4 animate-spin" />
               Анализирую вашу ситуацию...
             </div>
 
@@ -58,7 +58,7 @@
           </div>
         </div>
 
-        <ChatInput :loading="loading" :disabled="!!error" class="border-t" @send="sendMessage" />
+        <ChatInput :loading="loading" :disabled="!!error" class="shrink-0 border-t" @send="sendMessage" />
       </div>
     </main>
   </div>
@@ -77,6 +77,25 @@ const loading = ref(false)
 const error = ref(false)
 const recommended = ref<RecommendedArticle[]>([])
 
+const containerStyle = ref<Record<string, string>>({ height: 'calc(100vh - 64px)' })
+const scrollContainer = ref<HTMLElement | null>(null)
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (scrollContainer.value) {
+      scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
+    }
+  })
+}
+
+watch([messages, loading, recommended], scrollToBottom, { deep: true })
+
+function updateContainerStyle() {
+  const footer = document.querySelector('footer')
+  const footerH = footer ? footer.offsetHeight + 48 : 0
+  containerStyle.value = { height: `calc(100vh - 64px - ${footerH}px)` }
+}
+
 const suggested = [
   'Мне положены выплаты как студенческой семье?',
   'Какие льготы есть при рождении ребёнка?',
@@ -91,8 +110,12 @@ function resetView() {
 
 async function loadChats() {
   chats.value = await request<Chat[]>('/api/assistant/chats')
-  if (route.query.q && chats.value.length === 0) {
+  if (route.query.q) {
     await newChat()
+    return
+  }
+  if (chats.value.length > 0 && !activeChatId.value) {
+    await selectChat(chats.value[0].id)
   }
 }
 
@@ -133,12 +156,16 @@ async function sendMessage(content: string) {
 }
 
 function startWithQuestion(q: string) {
-  if (!activeChatId.value) {
-    newChat().then(() => sendMessage(q))
-  } else {
-    sendMessage(q)
-  }
+  newChat().then(() => sendMessage(q))
 }
 
-onMounted(loadChats)
+onMounted(() => {
+  updateContainerStyle()
+  window.addEventListener('resize', updateContainerStyle)
+  loadChats()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateContainerStyle)
+})
 </script>

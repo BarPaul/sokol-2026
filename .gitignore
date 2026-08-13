@@ -216,10 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-
-# Project-specific
-opencode.json
-AGENTS.md
 prompt.md
 
 # SQLite database

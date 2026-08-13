@@ -73,6 +73,4 @@ const isActive = (to: string) => {
   if (to === '/admin') return route.path === '/admin'
   return route.path.startsWith(to)
 }
-
-definePageMeta({ layout: 'admin' })
 </script>

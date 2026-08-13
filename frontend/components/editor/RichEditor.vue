@@ -1,40 +1,106 @@
 <template>
   <div class="rich-editor">
     <div class="mb-2 flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1.5">
-      <button type="button" class="rich-btn" title="Жирный" :class="{ 'rich-btn-active': active('bold') }" @mousedown.prevent="exec('bold')">
+      <button
+        type="button"
+        class="rich-btn"
+        title="Жирный"
+        :class="{ 'rich-btn-active': editor?.isActive('bold') }"
+        @mousedown.prevent="editor?.chain().focus().toggleBold().run()"
+      >
         <Icon name="heroicons:bold" class="h-4 w-4" />
       </button>
-      <button type="button" class="rich-btn" title="Курсив" :class="{ 'rich-btn-active': active('italic') }" @mousedown.prevent="exec('italic')">
+      <button
+        type="button"
+        class="rich-btn"
+        title="Курсив"
+        :class="{ 'rich-btn-active': editor?.isActive('italic') }"
+        @mousedown.prevent="editor?.chain().focus().toggleItalic().run()"
+      >
         <Icon name="heroicons:italic" class="h-4 w-4" />
       </button>
-      <button type="button" class="rich-btn" title="Подчёркнутый" :class="{ 'rich-btn-active': active('underline') }" @mousedown.prevent="exec('underline')">
+      <button
+        type="button"
+        class="rich-btn"
+        title="Подчёркнутый"
+        :class="{ 'rich-btn-active': editor?.isActive('underline') }"
+        @mousedown.prevent="editor?.chain().focus().toggleUnderline().run()"
+      >
         <Icon name="heroicons:underline" class="h-4 w-4" />
       </button>
-      <button type="button" class="rich-btn" title="Зачёркнутый" :class="{ 'rich-btn-active': active('strikeThrough') }" @mousedown.prevent="exec('strikeThrough')">
+      <button
+        type="button"
+        class="rich-btn"
+        title="Зачёркнутый"
+        :class="{ 'rich-btn-active': editor?.isActive('strike') }"
+        @mousedown.prevent="editor?.chain().focus().toggleStrike().run()"
+      >
         <Icon name="heroicons:strikethrough" class="h-4 w-4" />
       </button>
 
       <span class="mx-1 h-5 w-px bg-slate-300" />
 
-      <select class="rich-select" title="Размер текста" @change="setSize($event)">
-        <option value="3">Обычный</option>
-        <option value="4">Крупный</option>
-        <option value="5">Заголовок 2</option>
-        <option value="6">Заголовок 1</option>
-        <option value="1">Мелкий</option>
-        <option value="2">Маленький</option>
-      </select>
-
-      <input type="color" class="h-8 w-8 cursor-pointer rounded border border-slate-300 p-0.5" title="Цвет текста" @input="setColor($event)">
-      <input type="color" class="h-8 w-8 cursor-pointer rounded border border-slate-300 p-0.5" title="Цвет фона" @input="setBgColor($event)">
+      <button
+        type="button"
+        class="rich-btn"
+        title="Обычный текст"
+        :class="{ 'rich-btn-active': editor?.isActive('paragraph') }"
+        @mousedown.prevent="editor?.chain().focus().setParagraph().run()"
+      >
+        <span class="text-xs font-medium">¶</span>
+      </button>
+      <button
+        type="button"
+        class="rich-btn"
+        title="Заголовок 1"
+        :class="{ 'rich-btn-active': editor?.isActive('heading', { level: 1 }) }"
+        @mousedown.prevent="editor?.chain().focus().toggleHeading({ level: 1 }).run()"
+      >
+        <span class="text-xs font-bold">H1</span>
+      </button>
+      <button
+        type="button"
+        class="rich-btn"
+        title="Заголовок 2"
+        :class="{ 'rich-btn-active': editor?.isActive('heading', { level: 2 }) }"
+        @mousedown.prevent="editor?.chain().focus().toggleHeading({ level: 2 }).run()"
+      >
+        <span class="text-xs font-bold">H2</span>
+      </button>
 
       <span class="mx-1 h-5 w-px bg-slate-300" />
 
-      <button type="button" class="rich-btn" title="Цитата" :class="{ 'rich-btn-active': active('formatBlock', 'blockquote') }" @mousedown.prevent="setBlock('blockquote')">
+      <input type="color" class="h-8 w-8 cursor-pointer rounded border border-slate-300 p-0.5" title="Цвет текста" @input="setColor($event, 'text')">
+      <input type="color" class="h-8 w-8 cursor-pointer rounded border border-slate-300 p-0.5" title="Цвет фона" @input="setColor($event, 'bg')">
+
+      <span class="mx-1 h-5 w-px bg-slate-300" />
+
+      <button
+        type="button"
+        class="rich-btn"
+        title="Цитата"
+        :class="{ 'rich-btn-active': editor?.isActive('blockquote') }"
+        @mousedown.prevent="editor?.chain().focus().toggleBlockquote().run()"
+      >
         <Icon name="heroicons:chat-bubble-bottom-center-text" class="h-4 w-4" />
       </button>
-      <button type="button" class="rich-btn" title="Список" :class="{ 'rich-btn-active': active('insertUnorderedList') }" @mousedown.prevent="exec('insertUnorderedList')">
+      <button
+        type="button"
+        class="rich-btn"
+        title="Маркированный список"
+        :class="{ 'rich-btn-active': editor?.isActive('bulletList') }"
+        @mousedown.prevent="editor?.chain().focus().toggleBulletList().run()"
+      >
         <Icon name="heroicons:list-bullet" class="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        class="rich-btn"
+        title="Нумерованный список"
+        :class="{ 'rich-btn-active': editor?.isActive('orderedList') }"
+        @mousedown.prevent="editor?.chain().focus().toggleOrderedList().run()"
+      >
+        <Icon name="heroicons:numbered-list" class="h-4 w-4" />
       </button>
       <button type="button" class="rich-btn" title="Ссылка" @mousedown.prevent="addLink">
         <Icon name="heroicons:link" class="h-4 w-4" />
@@ -48,6 +114,24 @@
 
       <span class="mx-1 h-5 w-px bg-slate-300" />
 
+      <button
+        type="button"
+        class="rich-btn"
+        title="Отменить"
+        :disabled="!editor?.can().undo()"
+        @mousedown.prevent="editor?.chain().focus().undo().run()"
+      >
+        <Icon name="heroicons:arrow-uturn-left" class="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        class="rich-btn"
+        title="Повторить"
+        :disabled="!editor?.can().redo()"
+        @mousedown.prevent="editor?.chain().focus().redo().run()"
+      >
+        <Icon name="heroicons:arrow-uturn-right" class="h-4 w-4" />
+      </button>
       <button type="button" class="rich-btn" title="Скачать как Markdown" @mousedown.prevent="downloadMd">
         <Icon name="heroicons:arrow-down-tray" class="h-4 w-4" />
       </button>
@@ -56,13 +140,7 @@
       </button>
     </div>
 
-    <div
-      ref="editorEl"
-      class="input-sf min-h-72 cursor-text whitespace-pre-wrap [&_blockquote]:ml-0 [&_blockquote]:border-l-4 [&_blockquote]:border-teal-300 [&_blockquote]:bg-teal-50 [&_blockquote]:px-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:not-italic"
-      contenteditable
-      @input="emitChange"
-      @keyup="trackActive"
-    />
+    <EditorContent :editor="editor" class="input-sf min-h-72 cursor-text" />
 
     <input ref="fileInput" type="file" class="hidden" accept="image/*" @change="onFilePicked">
     <input ref="anyFileInput" type="file" class="hidden" @change="onAnyFilePicked">
@@ -70,6 +148,14 @@
 </template>
 
 <script setup lang="ts">
+import { useEditor, EditorContent } from '@tiptap/vue-3'
+import StarterKit from '@tiptap/starter-kit'
+import Link from '@tiptap/extension-link'
+import Image from '@tiptap/extension-image'
+import { TextStyle } from '@tiptap/extension-text-style'
+import Color from '@tiptap/extension-color'
+import Highlight from '@tiptap/extension-highlight'
+import Underline from '@tiptap/extension-underline'
 import type { Ref } from 'vue'
 
 const props = defineProps<{
@@ -79,87 +165,66 @@ const props = defineProps<{
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
-const editorEl: Ref<HTMLDivElement | null> = ref(null)
 const fileInput: Ref<HTMLInputElement | null> = ref(null)
 const anyFileInput: Ref<HTMLInputElement | null> = ref(null)
 const api = useApi()
 
-onMounted(() => {
-  if (editorEl.value) {
-    editorEl.value.innerHTML = props.modelValue || ''
-    if (!props.modelValue && props.placeholder) {
-      const ph = document.createElement('p')
-      ph.className = 'text-slate-400'
-      ph.textContent = props.placeholder
-      ph.dataset.placeholder = '1'
-      editorEl.value.appendChild(ph)
-    }
-  }
+const editor = useEditor({
+  content: props.modelValue || '',
+  extensions: [
+    StarterKit.configure({
+      link: false,
+      underline: false,
+    }),
+    Underline,
+    Link.configure({
+      openOnClick: false,
+      autolink: true,
+      HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' },
+    }),
+    Image.configure({ allowBase64: true, inline: false }),
+    TextStyle,
+    Color,
+    Highlight.configure({ multicolor: true }),
+  ],
+  editorProps: {
+    attributes: {
+      placeholder: props.placeholder || '',
+      class: 'outline-none min-h-72',
+    },
+  },
+  onUpdate: ({ editor }) => {
+    emit('update:modelValue', editor.isEmpty ? '' : editor.getHTML())
+  },
 })
 
 watch(
   () => props.modelValue,
   (v) => {
-    const el = editorEl.value
-    if (el && document.activeElement !== el && v !== el.innerHTML) {
-      el.innerHTML = v || ''
+    const ed = editor.value
+    if (ed && v !== ed.getHTML()) {
+      ed.commands.setContent(v || '')
     }
   },
 )
 
-function exec(cmd: string, value?: string) {
-  if (!editorEl.value) return
-  editorEl.value.focus()
-  document.execCommand(cmd, false, value)
-  emitChange()
-  trackActive()
-}
-
-function setSize(e: Event) {
-  const value = (e.target as HTMLSelectElement).value
-  exec('fontSize', value)
-  document.execCommand('styleWithCSS', false, 'true')
-  const el = editorEl.value?.querySelector('font[size="' + value + '"]')
-  if (el) {
-    const span = document.createElement('span')
-    const sizes: Record<string, string> = { '1': '0.75rem', '2': '0.85rem', '3': '1rem', '4': '1.25rem', '5': '1.5rem', '6': '2rem' }
-    const fs = sizes[value]
-    if (fs) span.style.fontSize = fs
-    span.innerHTML = el.innerHTML
-    el.replaceWith(span)
-  }
-  emitChange()
-}
-
-function setColor(e: Event) {
-  document.execCommand('foreColor', false, (e.target as HTMLInputElement).value)
-  emitChange()
-}
-
-function setBgColor(e: Event) {
-  document.execCommand('hiliteColor', false, (e.target as HTMLInputElement).value)
-  emitChange()
-}
-
-function setBlock(block: string) {
-  exec('formatBlock', block)
-}
-
-function active(cmd: string, _value?: string): boolean {
-  try {
-    return document.queryCommandState(cmd)
-  } catch {
-    return false
-  }
-}
-
-function trackActive() {
-  // триггерит перерендер для подсветки активных кнопок
+function setColor(e: Event, kind: 'text' | 'bg') {
+  const value = (e.target as HTMLInputElement).value
+  if (!editor.value) return
+  if (kind === 'text') editor.value.chain().focus().setColor(value).run()
+  else editor.value.chain().focus().toggleHighlight({ color: value }).run()
 }
 
 function addLink() {
-  const url = window.prompt('Введите URL (https://...)')
-  if (url) exec('createLink', url)
+  if (!editor.value) return
+  const prev = editor.value.getAttributes('link').href as string | undefined
+  const url = window.prompt('Введите URL (https://...)', prev || 'https://')
+  if (url === null) return
+  if (url === '') {
+    editor.value.chain().focus().extendMarkRange('link').unsetLink().run()
+  } else {
+    editor.value.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+  }
 }
 
 function openFile(kind: 'image' | 'file') {
@@ -182,12 +247,10 @@ async function onFilePicked(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
-  if (!editorEl.value || !file) return
+  if (!editor.value || !file) return
   try {
     const url = await upload(file)
-    editorEl.value.focus()
-    document.execCommand('insertHTML', false, `<img src="${url}" alt="${file.name}" class="my-2 max-w-full rounded-lg" />`)
-    emitChange()
+    editor.value.chain().focus().setImage({ src: url, alt: file.name }).run()
   } catch {
     window.alert('Не удалось загрузить изображение')
   }
@@ -197,37 +260,22 @@ async function onAnyFilePicked(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
-  if (!editorEl.value || !file) return
+  if (!editor.value || !file) return
   try {
     const url = await upload(file)
-    editorEl.value.focus()
-    document.execCommand('insertHTML', false, `<a href="${url}" class="text-teal-700 underline">📎 ${file.name}</a>`)
-    emitChange()
+    editor.value.chain().focus().insertContent(`<a href="${url}" class="text-teal-700 underline">📎 ${file.name}</a>`).run()
   } catch {
     window.alert('Не удалось загрузить файл')
   }
 }
 
-function emitChange() {
-  if (!editorEl.value) return
-  const el = editorEl.value
-  if (el.dataset.placeholder && el.textContent?.trim() === '') {
-    emit('update:modelValue', '')
-  } else {
-    el.querySelectorAll('[data-placeholder]').forEach(n => n.remove())
-    emit('update:modelValue', el.innerHTML)
-  }
-}
-
 function clear() {
-  if (editorEl.value) {
-    editorEl.value.innerHTML = ''
-    emit('update:modelValue', '')
-  }
+  editor.value?.chain().focus().clearContent(true).run()
+  emit('update:modelValue', '')
 }
 
 function downloadMd() {
-  const html = editorEl.value?.innerHTML || ''
+  const html = editor.value?.getHTML() || ''
   const md = htmlToMarkdown(html)
   const blob = new Blob([md], { type: 'text/markdown' })
   const url = URL.createObjectURL(blob)
@@ -284,17 +332,49 @@ function htmlToMarkdown(html: string): string {
 .rich-btn:hover {
   background-color: #e2e8f0;
 }
+.rich-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 .rich-btn-active {
   background-color: #ccfbf1;
   color: #0f766e;
 }
-.rich-select {
-  height: 2rem;
-  border: 1px solid #e2e8f0;
+:deep(.tiptap p.is-editor-empty:first-child::before) {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: #94a3b8;
+}
+:deep(.tiptap blockquote) {
+  margin: 0.5rem 0;
+  border-left: 4px solid #5eead4;
+  background: #f0fdfa;
+  padding: 0.5rem 1rem;
   border-radius: 0.375rem;
-  background: #fff;
-  font-size: 0.75rem;
-  padding: 0 0.5rem;
   color: #475569;
+}
+:deep(.tiptap img) {
+  max-width: 100%;
+  border-radius: 0.5rem;
+  margin: 0.5rem 0;
+}
+:deep(.tiptap ul),
+:deep(.tiptap ol) {
+  padding-left: 1.25rem;
+  margin: 0.5rem 0;
+}
+:deep(.tiptap a) {
+  color: #0f766e;
+  text-decoration: underline;
+  cursor: pointer;
+}
+:deep(.tiptap h1),
+:deep(.tiptap h2),
+:deep(.tiptap h3) {
+  margin: 1rem 0 0.5rem;
+  font-weight: 600;
+  color: #0f172a;
 }
 </style>
